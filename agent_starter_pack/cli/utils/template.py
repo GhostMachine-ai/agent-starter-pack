@@ -1030,8 +1030,8 @@ def merge_guidance_file(
     existing_content = guidance_file.read_text()
 
     # Check if existing file has ASP-managed markers
-    asp_start_marker = "<!-- ASP-MANAGED-START:"
-    asp_end_marker = "<!-- ASP-MANAGED-END:"
+    asp_start_marker = "<!-- ASP-MANAGED-START: agent-guidance"
+    asp_end_marker = "<!-- ASP-MANAGED-END: agent-guidance"
 
     if asp_start_marker not in existing_content:
         # User's custom file without ASP sections - prepend ASP section
@@ -1662,6 +1662,13 @@ def process_template(
                     for item in generated_project_dir.iterdir():
                         dest_item = final_destination / item.name
 
+                        # Skip guidance file - it will be merged separately
+                        if item.name == agent_guidance_filename:
+                            logging.debug(
+                                f"Skipping {item.name} - will be merged separately"
+                            )
+                            continue
+
                         # Special handling for README files - always preserve existing README
                         # Special handling for pyproject.toml files - only preserve for in-folder updates
                         should_preserve_file = item.name.lower().startswith(
@@ -1979,11 +1986,13 @@ GOOGLE_API_KEY={google_api_key}
 
             # Merge guidance file if in enhance mode (in_folder=True)
             if in_folder:
-                # Read the newly generated guidance file from the template
-                generated_guidance_path = final_destination / agent_guidance_filename
+                # Read the newly generated guidance file from the temp directory
+                # This must be done BEFORE the file copy logic overwrites it
+                generated_guidance_path = generated_project_dir / agent_guidance_filename
                 if generated_guidance_path.exists():
                     new_guidance_content = generated_guidance_path.read_text()
                     # Merge with existing content (preserving user sections)
+                    # The file copy logic around L1662 skips this file to prevent data loss
                     merge_guidance_file(
                         final_destination,
                         agent_guidance_filename,
