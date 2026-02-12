@@ -666,6 +666,8 @@ def enhance(
         cli_override_args["include_data_ingestion"] = include_data_ingestion
     if prototype:
         cli_override_args["prototype"] = prototype
+    if agent_guidance_filename != "GEMINI.md":
+        cli_override_args["agent_guidance_filename"] = agent_guidance_filename
 
     if check_and_execute_with_saved_config(
         current_dir, auto_approve=auto_approve, cli_overrides=cli_override_args
