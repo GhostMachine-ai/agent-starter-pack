@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # External data source script for Terraform.
-# Reads JSON from stdin (with project_id, location, collection_id, display_name),
+# Reads JSON from stdin (with project_id, location, collection_id),
 # outputs JSON to stdout with the data_store_id.
 #
 # Usage (via Terraform external data source):
@@ -24,7 +24,6 @@
 #       project_id    = var.project_id
 #       location      = var.data_store_region
 #       collection_id = var.project_name
-#       display_name  = var.project_name
 #     }
 #   }
 
@@ -34,9 +33,8 @@ set -euo pipefail
 INPUT=$(cat)
 
 PROJECT_ID=$(echo "${INPUT}" | python3 -c "import sys, json; print(json.load(sys.stdin)['project_id'])")
-LOCATION=$(echo "${INPUT}" | python3 -c "import sys, json; print(json.load(sys.stdin)['location'])" <<< "${INPUT}")
-COLLECTION_ID=$(echo "${INPUT}" | python3 -c "import sys, json; print(json.load(sys.stdin)['collection_id'])" <<< "${INPUT}")
-DISPLAY_NAME=$(echo "${INPUT}" | python3 -c "import sys, json; print(json.load(sys.stdin)['display_name'])" <<< "${INPUT}")
+LOCATION=$(echo "${INPUT}" | python3 -c "import sys, json; print(json.load(sys.stdin)['location'])")
+COLLECTION_ID=$(echo "${INPUT}" | python3 -c "import sys, json; print(json.load(sys.stdin)['collection_id'])")
 
 TOKEN=$(gcloud auth application-default print-access-token 2>/dev/null || gcloud auth print-access-token)
 
@@ -47,10 +45,11 @@ else
   API_BASE="https://${LOCATION}-discoveryengine.googleapis.com"
 fi
 
-PARENT="projects/${PROJECT_ID}/locations/${LOCATION}/collections/${COLLECTION_ID}"
+# DataConnector is a singleton resource under the collection
+CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${LOCATION}/collections/${COLLECTION_ID}/dataConnector"
 
 RESPONSE=$(curl -s -X GET \
-  "${API_BASE}/v1alpha/${PARENT}/dataConnectors" \
+  "${API_BASE}/v1alpha/${CONNECTOR_PATH}" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "x-goog-user-project: ${PROJECT_ID}" \
   -H "Content-Type: application/json")
@@ -58,18 +57,15 @@ RESPONSE=$(curl -s -X GET \
 DATA_STORE_ID=$(echo "${RESPONSE}" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-for c in data.get('dataConnectors', []):
-    if c.get('displayName') == '${DISPLAY_NAME}':
-        entities = c.get('entities', [])
-        if entities:
-            ds = entities[0].get('dataStore', '')
-            # Extract data store ID from full resource name
-            # Format: projects/X/locations/Y/collections/Z/dataStores/ID
-            parts = ds.split('/')
-            if 'dataStores' in parts:
-                idx = parts.index('dataStores')
-                print(parts[idx + 1])
-                break
+entities = data.get('entities', [])
+if entities:
+    ds = entities[0].get('dataStore', '')
+    # Extract data store ID from full resource name
+    # Format: projects/X/locations/Y/collections/Z/dataStores/ID
+    parts = ds.split('/')
+    if 'dataStores' in parts:
+        idx = parts.index('dataStores')
+        print(parts[idx + 1])
 " 2>/dev/null || true)
 
 if [ -z "${DATA_STORE_ID}" ]; then

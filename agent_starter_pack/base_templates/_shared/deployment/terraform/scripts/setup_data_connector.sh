@@ -28,8 +28,6 @@ DISPLAY_NAME="${4:?Missing data_connector_display_name}"
 GCS_URI="${5:?Missing gcs_uri}"
 REFRESH_INTERVAL="${6:-86400s}"
 
-PARENT="projects/${PROJECT_ID}/locations/${LOCATION}/collections/${COLLECTION_ID}"
-
 TOKEN=$(gcloud auth application-default print-access-token 2>/dev/null || gcloud auth print-access-token)
 
 # Use regional endpoint for non-global locations
@@ -39,27 +37,25 @@ else
   API_BASE="https://${LOCATION}-discoveryengine.googleapis.com"
 fi
 
-# Check if connector already exists by listing connectors and filtering by display name
+# Check if connector already exists via getDataConnector (singleton per collection)
+CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${LOCATION}/collections/${COLLECTION_ID}/dataConnector"
 EXISTING=$(curl -s -X GET \
-  "${API_BASE}/v1alpha/${PARENT}/dataConnectors" \
+  "${API_BASE}/v1alpha/${CONNECTOR_PATH}" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "x-goog-user-project: ${PROJECT_ID}" \
   -H "Content-Type: application/json")
 
-CONNECTOR_NAME=$(echo "${EXISTING}" | python3 -c "
+CONNECTOR_STATE=$(echo "${EXISTING}" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    for c in data.get('dataConnectors', []):
-        if c.get('displayName') == '${DISPLAY_NAME}':
-            print(c['name'])
-            break
+    print(data.get('state', ''))
 except Exception:
     pass
 " 2>/dev/null || true)
 
-if [ -n "${CONNECTOR_NAME}" ]; then
-  echo "Data connector '${DISPLAY_NAME}' already exists: ${CONNECTOR_NAME}"
+if [ -n "${CONNECTOR_STATE}" ] && [ "${CONNECTOR_STATE}" != "" ]; then
+  echo "Data connector already exists in collection '${COLLECTION_ID}' (state: ${CONNECTOR_STATE})"
   echo "Skipping creation."
   exit 0
 fi
@@ -67,39 +63,53 @@ fi
 echo "Creating data connector '${DISPLAY_NAME}'..."
 
 # Create data connector via setUpDataConnectorV2
+# Parent is projects/{project}/locations/{location} (NOT including collections)
+# collectionId and collectionDisplayName are query parameters
+PARENT="projects/${PROJECT_ID}/locations/${LOCATION}"
 RESPONSE=$(curl -s -X POST \
-  "${API_BASE}/v1alpha/${PARENT}:setUpDataConnectorV2" \
+  "${API_BASE}/v1alpha/${PARENT}:setUpDataConnectorV2?collectionId=${COLLECTION_ID}&collectionDisplayName=${DISPLAY_NAME}" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "x-goog-user-project: ${PROJECT_ID}" \
   -H "Content-Type: application/json" \
   -d "{
-    \"dataConnector\": {
-      \"displayName\": \"${DISPLAY_NAME}\",
-      \"dataSource\": \"cloud_storage\",
-      \"refreshInterval\": \"${REFRESH_INTERVAL}\",
-      \"params\": {
-        \"paths\": \"${GCS_URI}\"
-      },
-      \"entities\": [
-        {
-          \"entityName\": \"documents\"
-        }
-      ],
-      \"staticIpEnabled\": false
-    }
+    \"dataSource\": \"gcs\",
+    \"refreshInterval\": \"${REFRESH_INTERVAL}\",
+    \"params\": {
+      \"instance_uris\": \"${GCS_URI}\"
+    },
+    \"entities\": [
+      {
+        \"entityName\": \"documents\"
+      }
+    ],
+    \"staticIpEnabled\": false
   }")
 
-# Check for LRO
+# Check for LRO or immediate completion
 LRO_NAME=$(echo "${RESPONSE}" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 print(data.get('name', ''))
 " 2>/dev/null || true)
 
+DONE=$(echo "${RESPONSE}" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(data.get('done', False))
+" 2>/dev/null || echo "False")
+
 if [ -z "${LRO_NAME}" ]; then
   echo "Error: Failed to create data connector. Response:"
   echo "${RESPONSE}"
   exit 1
+fi
+
+# If already done (synchronous completion)
+if [ "${DONE}" = "True" ]; then
+  echo "Data connector created successfully."
+  echo "Triggering initial connector sync..."
+  bash "$(dirname "$0")/start_connector_run.sh" "${PROJECT_ID}" "${LOCATION}" "${COLLECTION_ID}"
+  exit 0
 fi
 
 echo "LRO started: ${LRO_NAME}"

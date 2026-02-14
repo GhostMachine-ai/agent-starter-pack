@@ -33,33 +33,14 @@ else
   API_BASE="https://${LOCATION}-discoveryengine.googleapis.com"
 fi
 
-PARENT="projects/${PROJECT_ID}/locations/${LOCATION}/collections/${COLLECTION_ID}"
+# DataConnector is a singleton resource under the collection
+CONNECTOR_PATH="projects/${PROJECT_ID}/locations/${LOCATION}/collections/${COLLECTION_ID}/dataConnector"
 
-# List data connectors to find the connector name
-RESPONSE=$(curl -s -X GET \
-  "${API_BASE}/v1alpha/${PARENT}/dataConnectors" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "x-goog-user-project: ${PROJECT_ID}" \
-  -H "Content-Type: application/json")
-
-CONNECTOR_NAME=$(echo "${RESPONSE}" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-connectors = data.get('dataConnectors', [])
-if connectors:
-    print(connectors[0]['name'])
-" 2>/dev/null || true)
-
-if [ -z "${CONNECTOR_NAME}" ]; then
-  echo "Error: No data connector found in collection '${COLLECTION_ID}'."
-  exit 1
-fi
-
-echo "Starting connector run for: ${CONNECTOR_NAME}"
+echo "Starting connector run for: ${CONNECTOR_PATH}"
 
 # Trigger sync via startConnectorRun (v1alpha)
 SYNC_RESPONSE=$(curl -s -X POST \
-  "${API_BASE}/v1alpha/${CONNECTOR_NAME}:startConnectorRun" \
+  "${API_BASE}/v1alpha/${CONNECTOR_PATH}:startConnectorRun" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "x-goog-user-project: ${PROJECT_ID}" \
   -H "Content-Type: application/json" \

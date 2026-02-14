@@ -41,7 +41,6 @@ data "external" "data_store_id_dev" {
     project_id    = var.dev_project_id
     location      = var.data_store_region
     collection_id = "${var.project_name}-collection"
-    display_name  = var.project_name
   }
 
   depends_on = [null_resource.data_connector_dev]
@@ -51,7 +50,7 @@ data "external" "data_store_id_dev" {
 resource "google_discovery_engine_search_engine" "search_engine_dev" {
   project        = var.dev_project_id
   engine_id      = "${var.project_name}-search"
-  collection_id  = "${var.project_name}-collection"
+  collection_id  = "default_collection"
   location       = var.data_store_region
   display_name   = "Search Engine App Dev"
   data_store_ids = [data.external.data_store_id_dev.result.data_store_id]

@@ -66,7 +66,7 @@ data_store_region = os.getenv("DATA_STORE_REGION", "us")
 data_store_id = os.getenv("DATA_STORE_ID", "")
 data_store_path = (
     f"projects/{project_id}/locations/{data_store_region}"
-    f"/collections/{{cookiecutter.project_name}}-collection/dataStores/{data_store_id}"
+    f"/collections/default_collection/dataStores/{data_store_id}"
 )
 
 vertex_search_tool = VertexAiSearchTool(data_store_id=data_store_path)

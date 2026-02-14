@@ -51,7 +51,6 @@ data "external" "data_store_id_staging" {
     project_id    = var.staging_project_id
     location      = var.data_store_region
     collection_id = "${var.project_name}-collection"
-    display_name  = var.project_name
   }
 
   depends_on = [null_resource.data_connector_staging]
@@ -65,7 +64,6 @@ data "external" "data_store_id_prod" {
     project_id    = var.prod_project_id
     location      = var.data_store_region
     collection_id = "${var.project_name}-collection"
-    display_name  = var.project_name
   }
 
   depends_on = [null_resource.data_connector_prod]
@@ -75,7 +73,7 @@ data "external" "data_store_id_prod" {
 resource "google_discovery_engine_search_engine" "search_engine_staging" {
   project        = var.staging_project_id
   engine_id      = "${var.project_name}-search"
-  collection_id  = "${var.project_name}-collection"
+  collection_id  = "default_collection"
   location       = var.data_store_region
   display_name   = "Search Engine App Staging"
   data_store_ids = [data.external.data_store_id_staging.result.data_store_id]
@@ -90,7 +88,7 @@ resource "google_discovery_engine_search_engine" "search_engine_staging" {
 resource "google_discovery_engine_search_engine" "search_engine_prod" {
   project        = var.prod_project_id
   engine_id      = "${var.project_name}-search"
-  collection_id  = "${var.project_name}-collection"
+  collection_id  = "default_collection"
   location       = var.data_store_region
   display_name   = "Search Engine App Prod"
   data_store_ids = [data.external.data_store_id_prod.result.data_store_id]
